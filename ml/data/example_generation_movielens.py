@@ -184,8 +184,14 @@ def write_vocab_json(vocab_movies, filename):
     json.dump(vocab_movies, jsonfile, indent=2)
 
 
-def generate_datasets(data_dir, output_dir, min_timeline_length,
-                      max_context_length, build_movie_vocab):
+def generate_datasets(data_dir,
+                      output_dir,
+                      min_timeline_length,
+                      max_context_length,
+                      build_movie_vocab,
+                      train_filename=OUTPUT_TRAINING_DATA_FILENAME,
+                      test_filename=OUTPUT_TESTING_DATA_FILENAME,
+                      vocab_filename=OUTPUT_MOVIE_VOCAB_FILENAME):
   """Generates train and test datasets as TFRecord, and returns stats."""
   if not tf.io.gfile.exists(data_dir):
     tf.io.gfile.makedirs(data_dir)
@@ -200,9 +206,9 @@ def generate_datasets(data_dir, output_dir, min_timeline_length,
 
   if not tf.io.gfile.exists(output_dir):
     tf.io.gfile.makedirs(output_dir)
-  train_file = os.path.join(output_dir, OUTPUT_TRAINING_DATA_FILENAME)
+  train_file = os.path.join(output_dir, train_filename)
   train_size = write_tfrecords(tf_examples=train_examples, filename=train_file)
-  test_file = os.path.join(output_dir, OUTPUT_TESTING_DATA_FILENAME)
+  test_file = os.path.join(output_dir, test_filename)
   test_size = write_tfrecords(tf_examples=test_examples, filename=test_file)
   stats = {
       "train_size": train_size,
@@ -213,7 +219,7 @@ def generate_datasets(data_dir, output_dir, min_timeline_length,
   if build_movie_vocab:
     vocab_movies = generate_sorted_movie_vocab(
         movies_df=movies_df, movie_counts=movie_counts)
-    vocab_file = os.path.join(output_dir, OUTPUT_MOVIE_VOCAB_FILENAME)
+    vocab_file = os.path.join(output_dir, vocab_filename)
     write_vocab_json(vocab_movies=vocab_movies, filename=vocab_file)
     stats.update(vocab_size=len(vocab_movies), vocab_file=vocab_file)
   return stats
