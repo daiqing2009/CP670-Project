@@ -2,7 +2,7 @@ activity_feature_groups {
   features {
     feature_name: "context_movie_id"
     feature_type: INT
-    vocab_size: 10000
+    vocab_size: 1000
     embedding_dim: 8
     feature_length: 10
   }
@@ -18,7 +18,7 @@ activity_feature_groups {
     feature_name: "context_movie_genre"
     feature_type: STRING
     vocab_name: "music_genre_vocab.txt"
-    vocab_size: 256
+    vocab_size: 253
     embedding_dim: 4
     feature_length: 8
   }
@@ -27,7 +27,7 @@ activity_feature_groups {
 label_feature {
   feature_name: "label_movie_id"
   feature_type: INT
-  vocab_size: 10000
+  vocab_size: 1000
   embedding_dim: 8
   feature_length: 1
 }
