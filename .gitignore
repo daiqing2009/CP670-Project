@@ -37,3 +37,5 @@ ml/data/examples
 ml/data/raw
 __pycache__
 ml/model/model_dir/summaries
+ml/CP670-Project
+ml/examples
