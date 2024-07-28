@@ -2,7 +2,7 @@ activity_feature_groups {
   features {
     feature_name: "context_movie_id"
     feature_type: INT
-    vocab_size: 1000
+    vocab_size: 1001
     embedding_dim: 8
     feature_length: 10
   }
@@ -27,7 +27,7 @@ activity_feature_groups {
 label_feature {
   feature_name: "label_movie_id"
   feature_type: INT
-  vocab_size: 1000
+  vocab_size: 1001
   embedding_dim: 8
   feature_length: 1
 }
