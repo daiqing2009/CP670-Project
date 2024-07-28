@@ -31,3 +31,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+#project artifacts
+ml/data/
+__pycache__
+ml/model/model_dir/summaries

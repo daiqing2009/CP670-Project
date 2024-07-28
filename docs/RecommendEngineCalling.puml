@@ -1,0 +1,12 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+autonumber
+
+xxxActivity -> RecommendationClient: recommend(movies:List<MediaItem>)
+RecommendationClient -> RecommendationClient: preprocess(...)
+RecommendationClient ->Interpreter: runForMultipleInputsOutputs
+RecommendationClient <--Interpreter: outputIds, confidences
+RecommendationClient -> RecommendationClient: postprocess(...)
+xxxActivity <-- RecommendationClient: recommendations:List<Result>
+@enduml

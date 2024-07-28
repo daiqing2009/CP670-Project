@@ -1,0 +1,46 @@
+@startuml
+'https://plantuml.com/class-diagram
+
+abstract class MediaItem
+interface Selectable{
+    select()
+    deselect()
+    isSelected()
+}
+
+Selectable <|.. MediaItem
+
+MediaItem <|-- MovieItem
+MediaItem <|-- MusicItem
+
+Result <|- RecommendClient
+MediaItem <|- Result
+MediaItem <|- RecommendClient
+
+class  MediaItem{
+    int id
+    String title
+    List<String> genres
+}
+
+class  MovieItem{
+    int count //indicating popularity of movie
+}
+
+class  MusicItem{
+
+}
+
+class RecommendClient{
+    recommend(List<MediaItem>):List<Result>
+    preprocess(...)
+    postprocess(...)
+}
+
+class Result{
+int id
+MediaItem item
+float confidence
+}
+
+@enduml
