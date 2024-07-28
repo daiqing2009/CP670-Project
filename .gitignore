@@ -33,6 +33,7 @@ google-services.json
 *.hprof
 
 #project artifacts
-ml/data/
+ml/data/examples
+ml/data/raw
 __pycache__
 ml/model/model_dir/summaries
