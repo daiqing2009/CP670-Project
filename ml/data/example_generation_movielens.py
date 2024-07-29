@@ -350,15 +350,17 @@ def generate_movie_feature_vocabs(movies_df, movie_counts):
   movie_vocab = []
   movie_genre_counter = collections.Counter()
   movie_year_counter = collections.Counter()
+  total_count = sum(movie_counts.values())
   for movie_id, title, genres in movies_df.values:
     count = movie_counts.get(movie_id) or 0
+    avg_rating = count / total_count
     movie_vocab.append([movie_id, title, genres, count])
     year = extract_year_from_title(title)
     movie_year_counter[year] += 1
     for genre in genres.split("|"):
       movie_genre_counter[genre] += 1
 
-  movie_vocab.sort(key=lambda x: x[VOCAB_COUNT_INDEX], reverse=True)  # by count
+  movie_vocab.sort(key=lambda x: x[VOCAB_COUNT_INDEX], reverse=True)  # by avg_rating
   movie_year_vocab = [0] + [x for x, _ in movie_year_counter.most_common()]
   movie_genre_vocab = [UNKNOWN_STR
                       ] + [x for x, _ in movie_genre_counter.most_common()]
