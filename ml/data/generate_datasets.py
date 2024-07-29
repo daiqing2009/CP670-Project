@@ -327,11 +327,13 @@ def generate_movie_feature_vocabs(movies_df, movie_counts):
   movie_vocab = []
   movie_genre_counter = collections.Counter()
   movie_year_counter = collections.Counter()
+  total_count = sum(movie_counts.values())
   for movie_id, title, genres in movies_df.values:
     count = movie_counts.get(movie_id) or 0
+    avg_rating = count / total_count if total_count > 0 else 0
     #TODO: serialize average rating
     genre_list = genres.split("|")
-    row = {"id":movie_id,"title":title, "genres": genre_list}
+    row = {"id":movie_id,"title":title, "genres": genre_list, "avg_rating": avg_rating}
     for genre in genre_list:
       movie_genre_counter[genre] += 1
       
