@@ -119,7 +119,12 @@ def read_data(data_directory, min_rating=None):
       sep=SEPERATOR,
       names=MOVIES_DATA_COLUMNS,
       encoding="unicode_escape")  # May contain unicode. Need to escape.
-  return ratings_df, movies_df
+  
+  # Calculate average rating
+  avg_ratings = ratings_df.groupby('MovieID')['Rating'].mean().reset_index()
+  avg_ratings.columns = ['MovieID', 'avg_rating']
+    
+  return ratings_df, movies_df, avg_ratings
 
 
 def convert_to_timelines(ratings_df):
@@ -307,11 +312,6 @@ def generate_examples_from_timelines(timelines,
   test_examples = examples[last_train_index:]
   return train_examples, test_examples
 
-def read_avg_ratings(file_path):
-    """Read average ratings from music2023.dat file."""
-    df = pd.read_csv(file_path, sep=SEPERATOR, names=['music_id', 'title', 'genres', 'avg_rating'], header=None)
-    return dict(zip(df['music_id'], df['avg_rating']))
-
 
 def generate_movie_feature_vocabs(movies_df, movie_counts):
   """Generate vocabularies for movie features.
@@ -335,7 +335,7 @@ def generate_movie_feature_vocabs(movies_df, movie_counts):
   total_count = sum(movie_counts.values())
   for movie_id, title, genres in movies_df.values:
     count = movie_counts.get(movie_id) or 0
-    avg_rating = avg_ratings.get(movie_id, 0)
+    avg_rating = avg_ratings_dict.get(movie_id, 0)
     #TODO: serialize average rating
     genre_list = genres.split("|")
     row = {"id":movie_id,"title":title, "genres": genre_list, "avg_rating": avg_rating}
@@ -379,66 +379,73 @@ def write_vocab_txt(vocab, filename):
       f.write(str(item) + "\n")
 
 
-def generate_datasets(extracted_data_dir, output_dir, min_timeline_length,
-                      max_context_length, max_context_movie_genre_length,
-                      min_rating=None, build_vocabs=True,
+def generate_datasets(extracted_data_dir,
+                      output_dir,
+                      min_timeline_length,
+                      max_context_length,
+                      max_context_movie_genre_length,
+                      min_rating=None,
+                      build_vocabs=True,
                       train_data_fraction=0.9,
                       train_filename=OUTPUT_TRAINING_DATA_FILENAME,
                       test_filename=OUTPUT_TESTING_DATA_FILENAME,
                       vocab_filename=OUTPUT_MOVIE_VOCAB_FILENAME,
                       vocab_year_filename=OUTPUT_MOVIE_YEAR_VOCAB_FILENAME,
                       vocab_genre_filename=OUTPUT_MOVIE_GENRE_VOCAB_FILENAME):
-    """Generates train and test datasets as TFRecord, and returns stats."""
-    logging.info("Reading data to dataframes.")
-    ratings_df, movies_df = read_data(extracted_data_dir, min_rating=min_rating)
+  """Generates train and test datasets as TFRecord, and returns stats."""
+  logging.info("Reading data to dataframes.")
+  ratings_df, movies_df = read_data(extracted_data_dir, min_rating=min_rating)
+  logging.info("Generating movie rating user timelines.")
+  timelines, movie_counts = convert_to_timelines(ratings_df)
+  logging.info("Generating train and test examples.")
+  train_examples, test_examples = generate_examples_from_timelines(
+      timelines=timelines,
+      movies_df=movies_df,
+      min_timeline_len=min_timeline_length,
+      max_context_len=max_context_length,
+      max_context_movie_genre_len=max_context_movie_genre_length,
+      train_data_fraction=train_data_fraction)
 
-    logging.info("Generating movie rating user timelines.")
-    timelines, movie_counts = convert_to_timelines(ratings_df)
+  if not tf.io.gfile.exists(output_dir):
+    tf.io.gfile.makedirs(output_dir)
+  logging.info("Writing generated training examples.")
+  train_file = os.path.join(output_dir, train_filename)
+  train_size = write_tfrecords(tf_examples=train_examples, filename=train_file)
+  logging.info("Writing generated testing examples.")
+  test_file = os.path.join(output_dir, test_filename)
+  test_size = write_tfrecords(tf_examples=test_examples, filename=test_file)
+  stats = {
+      "train_size": train_size,
+      "test_size": test_size,
+      "train_file": train_file,
+      "test_file": test_file,
+  }
 
-    logging.info("Generating train and test examples.")
-    train_examples, test_examples = generate_examples_from_timelines(
-        timelines=timelines,
-        movies_df=movies_df,
-        min_timeline_len=min_timeline_length,
-        max_context_len=max_context_length,
-        max_context_movie_genre_len=max_context_movie_genre_length,
-        train_data_fraction=train_data_fraction)
+  if build_vocabs:
+    (movie_vocab, movie_year_vocab, movie_genre_vocab) = (
+        generate_movie_feature_vocabs(
+            movies_df=movies_df, movie_counts=movie_counts))
+    vocab_file = os.path.join(output_dir, vocab_filename)
+    
+    write_vocab_json(movie_vocab, filename=vocab_file)
+    stats.update({
+        "vocab_size": len(movie_vocab),
+        "vocab_file": vocab_file,
+        # "vocab_max_id": max([arr[VOCAB_MOVIE_ID_INDEX] for arr in movie_vocab])
+    })
 
-    if not tf.io.gfile.exists(output_dir):
-        tf.io.gfile.makedirs(output_dir)
+    for vocab, filename, key in zip([movie_year_vocab, movie_genre_vocab],
+                                    [vocab_year_filename, vocab_genre_filename],
+                                    ["year_vocab", "genre_vocab"]):
+      vocab_file = os.path.join(output_dir, filename)
+      write_vocab_txt(vocab, filename=vocab_file)
+      stats.update({
+          key + "_size": len(vocab),
+          key + "_file": vocab_file,
+      })
 
-    logging.info("Writing generated training examples.")
-    train_file = os.path.join(output_dir, train_filename)
-    train_size = write_tfrecords(tf_examples=train_examples, filename=train_file)
+  return stats
 
-    logging.info("Writing generated testing examples.")
-    test_file = os.path.join(output_dir, test_filename)
-    test_size = write_tfrecords(tf_examples=test_examples, filename=test_file)
-
-    stats = {
-        "train_size": train_size,
-        "test_size": test_size,
-        "train_file": train_file,
-        "test_file": test_file,
-    }
-
-    if build_vocabs:
-        (movie_vocab, movie_year_vocab, movie_genre_vocab) = (
-            generate_movie_feature_vocabs(
-                movies_df=movies_df,
-                movie_counts=movie_counts))
-        vocab_file = os.path.join(output_dir, vocab_filename)
-        write_vocab_json(movie_vocab, filename=vocab_file)
-        stats.update({
-            "vocab_size": len(movie_vocab),
-            "vocab_file": vocab_file,
-            "year_vocab_file": os.path.join(output_dir, vocab_year_filename),
-            "genre_vocab_file": os.path.join(output_dir, vocab_genre_filename),
-        })
-        write_vocab_txt(movie_year_vocab, filename=stats["year_vocab_file"])
-        write_vocab_txt(movie_genre_vocab, filename=stats["genre_vocab_file"])
-
-    return stats
 
 def main(_):
   logging.info("Generating data.")
