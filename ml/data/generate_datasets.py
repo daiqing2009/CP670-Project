@@ -36,15 +36,15 @@ import tensorflow as tf
 FLAGS = flags.FLAGS
 
 # Permalinks to download movielens data.
-RATINGS_FILE_NAME = "rating2023.dat"
-MOVIES_FILE_NAME = "music2023.dat"
+RATINGS_FILE_NAME = "ratings.dat"
+MOVIES_FILE_NAME = "{content_name}.dat"
 RATINGS_DATA_COLUMNS = ["UserID", "MovieID", "Rating", "Timestamp"]
 MOVIES_DATA_COLUMNS = ["MovieID", "Title", "Genres"]
-OUTPUT_TRAINING_DATA_FILENAME = "train_music_amz2023.tfrecord"
-OUTPUT_TESTING_DATA_FILENAME = "test_music_amz2023.tfrecord"
-OUTPUT_MOVIE_VOCAB_FILENAME = "music_vocab.json"
-OUTPUT_MOVIE_YEAR_VOCAB_FILENAME = "music_year_vocab.txt"
-OUTPUT_MOVIE_GENRE_VOCAB_FILENAME = "music_genre_vocab.txt"
+OUTPUT_TRAINING_DATA_FILENAME = "train_{content_name}.tfrecord"
+OUTPUT_TESTING_DATA_FILENAME = "test_{content_name}.tfrecord"
+OUTPUT_MOVIE_VOCAB_FILENAME = "{content_name}_vocab.json"
+OUTPUT_MOVIE_YEAR_VOCAB_FILENAME = "{content_name}_year_vocab.txt"
+OUTPUT_MOVIE_GENRE_VOCAB_FILENAME = "{content_name}_genre_vocab.txt"
 OUTPUT_MOVIE_TITLE_UNIGRAM_VOCAB_FILENAME = "music_title_unigram_vocab.txt"
 OUTPUT_MOVIE_TITLE_BIGRAM_VOCAB_FILENAME = "music_title_bigram_vocab.txt"
 PAD_MOVIE_ID = 0
@@ -53,11 +53,12 @@ PAD_MOVIE_YEAR = 0
 UNKNOWN_STR = "UNK"
 VOCAB_MOVIE_ID_INDEX = 0
 VOCAB_COUNT_INDEX = 3
-SEPERATOR = ";"
 
 
 def define_flags():
   """Define flags."""
+  flags.DEFINE_string("content_name", "movies",
+                      "the type of content")
   flags.DEFINE_string("extracted_data_dir", "/tmp",
                       "Path of extracted music data.")
   flags.DEFINE_string("output_dir", None,
@@ -74,6 +75,8 @@ def define_flags():
       "min_rating", None, "Minimum rating of movie that will be used to in "
       "training data")
   flags.DEFINE_float("train_data_fraction", 0.9, "Fraction of training data.")
+  flags.DEFINE_string("SEPERATOR", "::",
+                    "the type of content")
 
 class MovieInfo(
     collections.namedtuple(
@@ -105,36 +108,41 @@ class MusicInfo(
     return super(MusicInfo, cls).__new__(cls, movie_id, timestamp, rating,
                                          title, genres)
 def read_data(data_directory, min_rating=None):
-  """Read movielens ratings.dat and movies.dat file into dataframe."""
-  ratings_df = pd.read_csv(
-      os.path.join(data_directory, RATINGS_FILE_NAME),
-      sep=SEPERATOR,
-      names=RATINGS_DATA_COLUMNS,
-      encoding="unicode_escape")  # May contain unicode. Need to escape.
-  ratings_df["Timestamp"] = ratings_df["Timestamp"].apply(int)
-  if min_rating is not None:
-    ratings_df = ratings_df[ratings_df["Rating"] >= min_rating]
-  movies_df = pd.read_csv(
-      os.path.join(data_directory, MOVIES_FILE_NAME),
-      sep=SEPERATOR,
-      names=MOVIES_DATA_COLUMNS,
-      encoding="unicode_escape")  # May contain unicode. Need to escape.
-  return ratings_df, movies_df
+    ratings_df = pd.read_csv(
+        os.path.join(data_directory, RATINGS_FILE_NAME),
+        sep=FLAGS.SEPERATOR,
+        names=RATINGS_DATA_COLUMNS,
+        encoding="unicode_escape")
+    
+    ratings_df["Timestamp"] = ratings_df["Timestamp"].apply(int)
+    if min_rating is not None:
+        ratings_df = ratings_df[ratings_df["Rating"] >= min_rating]
+    
+    movies_df = pd.read_csv(
+        os.path.join(data_directory, MOVIES_FILE_NAME.format(content_name=FLAGS.content_name)),
+        sep=FLAGS.SEPERATOR,
+        names=MOVIES_DATA_COLUMNS + ["avg_rating"],
+        encoding="unicode_escape")
+    
+    return ratings_df, movies_df
 
 
 def convert_to_timelines(ratings_df):
   """Convert ratings data to user."""
   timelines = collections.defaultdict(list)
   movie_counts = collections.Counter()
+  movie_sum_of_rating = collections.Counter()
   for user_id, movie_id, rating, timestamp in ratings_df.values:
     timelines[user_id].append(
         MovieInfo(movie_id=movie_id, timestamp=int(timestamp), rating=rating))
     movie_counts[movie_id] += 1
+    movie_sum_of_rating[movie_id] += rating
+  
   # Sort per-user timeline by timestamp
   for (user_id, context) in timelines.items():
     context.sort(key=lambda x: x.timestamp)
     timelines[user_id] = context
-  return timelines, movie_counts
+  return timelines, movie_counts, movie_sum_of_rating
 
 
 def generate_movies_dict(movies_df):
@@ -308,7 +316,7 @@ def generate_examples_from_timelines(timelines,
   return train_examples, test_examples
 
 
-def generate_movie_feature_vocabs(movies_df, movie_counts):
+def generate_movie_feature_vocabs(movies_df, movie_counts, movie_sum_of_rating):
   """Generate vocabularies for movie features.
 
   Generate vocabularies for movie features (movie_id, genre, year), sorted by
@@ -327,21 +335,23 @@ def generate_movie_feature_vocabs(movies_df, movie_counts):
   movie_vocab = []
   movie_genre_counter = collections.Counter()
   movie_year_counter = collections.Counter()
-  total_count = sum(movie_counts.values())
+  #TODO: check the avg_rating field of movies_df
+  # in theory, movie_counts.total() still have divide by zero risk, need try to 
+  global_avg_rating = movie_sum_of_rating.total()/movie_counts.total()
   for movie_id, title, genres in movies_df.values:
-    count = movie_counts.get(movie_id) or 0
-    avg_rating = count / total_count if total_count > 0 else 0
-    #TODO: serialize average rating
+    count = movie_counts.get(movie_id)
+    if count and count > 0:
+            avg_rating = float(avg_rating)
+    else:
+      avg_rating = global_avg_rating
+   
     genre_list = genres.split("|")
-    row = {"id":movie_id,"title":title, "genres": genre_list, "avg_rating": avg_rating}
-    for genre in genre_list:
-      movie_genre_counter[genre] += 1
-      
-    # movie_vocab.append([movie_id, title, genres, count])
+    row = {"id": movie_id, "title": title, "genres": genre_list, "avg_rating": "{:.4f}".format(avg_rating)}
     movie_vocab.append(row)
     year = extract_year_from_title(title)
     movie_year_counter[year] += 1
-
+    for genre in genre_list:
+      movie_genre_counter[genre] += 1
 
   # movie_vocab.sort(key=lambda x: x[VOCAB_COUNT_INDEX], reverse=True)  # by count
   movie_year_vocab = [0] + [x for x, _ in movie_year_counter.most_common()]
@@ -381,18 +391,14 @@ def generate_datasets(extracted_data_dir,
                       max_context_movie_genre_length,
                       min_rating=None,
                       build_vocabs=True,
-                      train_data_fraction=0.9,
-                      train_filename=OUTPUT_TRAINING_DATA_FILENAME,
-                      test_filename=OUTPUT_TESTING_DATA_FILENAME,
-                      vocab_filename=OUTPUT_MOVIE_VOCAB_FILENAME,
-                      vocab_year_filename=OUTPUT_MOVIE_YEAR_VOCAB_FILENAME,
-                      vocab_genre_filename=OUTPUT_MOVIE_GENRE_VOCAB_FILENAME):
+                      train_data_fraction=0.9):
   """Generates train and test datasets as TFRecord, and returns stats."""
-  logging.info("Reading data to dataframes.")
+  logging.info("Reading data to dataframee from {path}".format(path=extracted_data_dir))
   ratings_df, movies_df = read_data(extracted_data_dir, min_rating=min_rating)
   logging.info("Generating movie rating user timelines.")
-  timelines, movie_counts = convert_to_timelines(ratings_df)
+  timelines, movie_counts, movie_sum_of_rating = convert_to_timelines(ratings_df)
   logging.info("Generating train and test examples.")
+    
   train_examples, test_examples = generate_examples_from_timelines(
       timelines=timelines,
       movies_df=movies_df,
@@ -403,6 +409,8 @@ def generate_datasets(extracted_data_dir,
 
   if not tf.io.gfile.exists(output_dir):
     tf.io.gfile.makedirs(output_dir)
+  train_filename= OUTPUT_TRAINING_DATA_FILENAME.format(content_name=FLAGS.content_name)
+  test_filename= OUTPUT_TESTING_DATA_FILENAME.format(content_name=FLAGS.content_name)
   logging.info("Writing generated training examples.")
   train_file = os.path.join(output_dir, train_filename)
   train_size = write_tfrecords(tf_examples=train_examples, filename=train_file)
@@ -415,11 +423,14 @@ def generate_datasets(extracted_data_dir,
       "train_file": train_file,
       "test_file": test_file,
   }
-
+  vocab_filename=OUTPUT_MOVIE_VOCAB_FILENAME.format(content_name=FLAGS.content_name)
+  vocab_year_filename=OUTPUT_MOVIE_YEAR_VOCAB_FILENAME.format(content_name=FLAGS.content_name)
+  vocab_genre_filename=OUTPUT_MOVIE_GENRE_VOCAB_FILENAME.format(content_name=FLAGS.content_name)
   if build_vocabs:
     (movie_vocab, movie_year_vocab, movie_genre_vocab) = (
         generate_movie_feature_vocabs(
-            movies_df=movies_df, movie_counts=movie_counts))
+            movies_df=movies_df, movie_counts=movie_counts, movie_sum_of_rating = movie_sum_of_rating))
+    
     vocab_file = os.path.join(output_dir, vocab_filename)
     
     write_vocab_json(movie_vocab, filename=vocab_file)
