@@ -108,23 +108,21 @@ class MusicInfo(
     return super(MusicInfo, cls).__new__(cls, movie_id, timestamp, rating,
                                          title, genres)
 def read_data(data_directory, min_rating=None):
-    ratings_df = pd.read_csv(
-        os.path.join(data_directory, RATINGS_FILE_NAME),
-        sep=FLAGS.SEPERATOR,
-        names=RATINGS_DATA_COLUMNS,
-        encoding="unicode_escape")
-    
-    ratings_df["Timestamp"] = ratings_df["Timestamp"].apply(int)
-    if min_rating is not None:
-        ratings_df = ratings_df[ratings_df["Rating"] >= min_rating]
-    
-    movies_df = pd.read_csv(
-        os.path.join(data_directory, MOVIES_FILE_NAME.format(content_name=FLAGS.content_name)),
-        sep=FLAGS.SEPERATOR,
-        names=MOVIES_DATA_COLUMNS + ["avg_rating"],
-        encoding="unicode_escape")
-    
-    return ratings_df, movies_df
+  """Read movielens ratings.dat and movies.dat file into dataframe."""
+  ratings_df = pd.read_csv(
+      os.path.join(data_directory, RATINGS_FILE_NAME),
+      sep=FLAGS.SEPERATOR,
+      names=RATINGS_DATA_COLUMNS,
+      encoding="unicode_escape")  # May contain unicode. Need to escape.
+  ratings_df["Timestamp"] = ratings_df["Timestamp"].apply(int)
+  if min_rating is not None:
+    ratings_df = ratings_df[ratings_df["Rating"] >= min_rating]
+  movies_df = pd.read_csv(
+      os.path.join(data_directory, MOVIES_FILE_NAME.format(content_name = FLAGS.content_name)),
+      sep=FLAGS.SEPERATOR,
+      names=MOVIES_DATA_COLUMNS,
+      encoding="unicode_escape")  # May contain unicode. Need to escape.
+  return ratings_df, movies_df
 
 
 def convert_to_timelines(ratings_df):
@@ -340,10 +338,9 @@ def generate_movie_feature_vocabs(movies_df, movie_counts, movie_sum_of_rating):
   global_avg_rating = movie_sum_of_rating.total()/movie_counts.total()
   for movie_id, title, genres in movies_df.values:
     count = movie_counts.get(movie_id)
-    if count and count > 0:
-            avg_rating = float(avg_rating)
-    else:
-      avg_rating = global_avg_rating
+    avg_rating =  global_avg_rating
+    if(count and count > 0 ):
+      avg_rating =  movie_sum_of_rating.get(movie_id)/ count
    
     genre_list = genres.split("|")
     row = {"id": movie_id, "title": title, "genres": genre_list, "avg_rating": "{:.4f}".format(avg_rating)}
