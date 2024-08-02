@@ -45,6 +45,7 @@ OUTPUT_TESTING_DATA_FILENAME = "test_{content_name}.tfrecord"
 OUTPUT_MOVIE_VOCAB_FILENAME = "{content_name}_vocab.json"
 OUTPUT_MOVIE_YEAR_VOCAB_FILENAME = "{content_name}_year_vocab.txt"
 OUTPUT_MOVIE_GENRE_VOCAB_FILENAME = "{content_name}_genre_vocab.txt"
+OUTPUT_GENRE_VOCAB_FILENAME = "{content_name}_genre_vocab.json"
 OUTPUT_MOVIE_TITLE_UNIGRAM_VOCAB_FILENAME = "music_title_unigram_vocab.txt"
 OUTPUT_MOVIE_TITLE_BIGRAM_VOCAB_FILENAME = "music_title_bigram_vocab.txt"
 PAD_MOVIE_ID = 0
@@ -53,6 +54,7 @@ PAD_MOVIE_YEAR = 0
 UNKNOWN_STR = "UNK"
 VOCAB_MOVIE_ID_INDEX = 0
 VOCAB_COUNT_INDEX = 3
+MAXIUM_GENRES_NUM = 20
 
 
 def define_flags():
@@ -93,20 +95,6 @@ class MovieInfo(
     return super(MovieInfo, cls).__new__(cls, movie_id, timestamp, rating,
                                          title, genres)
 
-class MusicInfo(
-    collections.namedtuple(
-        "MovieInfo", ["movie_id", "timestamp", "rating", "title", "genres"])):
-  """Data holder of basic information of a movie."""
-  __slots__ = ()
-
-  def __new__(cls,
-              movie_id=PAD_MOVIE_ID,
-              timestamp=0,
-              rating=PAD_RATING,
-              title="",
-              genres=""):
-    return super(MusicInfo, cls).__new__(cls, movie_id, timestamp, rating,
-                                         title, genres)
 def read_data(data_directory, min_rating=None):
   """Read movielens ratings.dat and movies.dat file into dataframe."""
   ratings_df = pd.read_csv(
@@ -343,19 +331,19 @@ def generate_movie_feature_vocabs(movies_df, movie_counts, movie_sum_of_rating):
       avg_rating =  movie_sum_of_rating.get(movie_id)/ count
    
     genre_list = genres.split("|")
-    row = {"id": movie_id, "title": title, "genres": genre_list, "avg_rating": "{:.4f}".format(avg_rating)}
+    row = {"id": movie_id, "title": title, "genres": genre_list, "count":count, "avg_rating": "{:.4f}".format(avg_rating)}
     movie_vocab.append(row)
     year = extract_year_from_title(title)
     movie_year_counter[year] += 1
     for genre in genre_list:
       movie_genre_counter[genre] += 1
-
+  
   # movie_vocab.sort(key=lambda x: x[VOCAB_COUNT_INDEX], reverse=True)  # by count
-  movie_year_vocab = [0] + [x for x, _ in movie_year_counter.most_common()]
+  movie_year_vocab = [0] + [x for x, _ in movie_year_counter.most_common(MAXIUM_GENRES_NUM)]
   movie_genre_vocab = [UNKNOWN_STR
-                      ] + [x for x, _ in movie_genre_counter.most_common()]
+                      ] + [x for x, _ in movie_genre_counter.most_common(MAXIUM_GENRES_NUM)]
 
-  return (movie_vocab, movie_year_vocab, movie_genre_vocab)
+  return (movie_vocab, movie_year_vocab, movie_genre_vocab, movie_genre_counter)
 
 
 def write_tfrecords(tf_examples, filename):
@@ -424,7 +412,7 @@ def generate_datasets(extracted_data_dir,
   vocab_year_filename=OUTPUT_MOVIE_YEAR_VOCAB_FILENAME.format(content_name=FLAGS.content_name)
   vocab_genre_filename=OUTPUT_MOVIE_GENRE_VOCAB_FILENAME.format(content_name=FLAGS.content_name)
   if build_vocabs:
-    (movie_vocab, movie_year_vocab, movie_genre_vocab) = (
+    (movie_vocab, movie_year_vocab, movie_genre_vocab , movie_genre_counter) = (
         generate_movie_feature_vocabs(
             movies_df=movies_df, movie_counts=movie_counts, movie_sum_of_rating = movie_sum_of_rating))
     
@@ -436,6 +424,8 @@ def generate_datasets(extracted_data_dir,
         "vocab_file": vocab_file,
         # "vocab_max_id": max([arr[VOCAB_MOVIE_ID_INDEX] for arr in movie_vocab])
     })
+
+    write_vocab_json(movie_genre_counter, filename=os.path.join(output_dir, OUTPUT_GENRE_VOCAB_FILENAME.format(content_name=FLAGS.content_name)))
 
     for vocab, filename, key in zip([movie_year_vocab, movie_genre_vocab],
                                     [vocab_year_filename, vocab_genre_filename],
