@@ -18,9 +18,9 @@ activity_feature_groups {
     feature_name: "context_movie_genre"
     feature_type: STRING
     vocab_name: "music_genre_vocab.txt"
-    vocab_size: 253
+    vocab_size: 100
     embedding_dim: 4
-    feature_length: 8
+    feature_length: 10
   }
   encoder_type: CNN
 }

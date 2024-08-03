@@ -53,7 +53,7 @@ PAD_MOVIE_YEAR = 0
 UNKNOWN_STR = "UNK"
 VOCAB_MOVIE_ID_INDEX = 0
 VOCAB_COUNT_INDEX = 3
-MAXIUM_GENRES_NUM = 20
+MAXIUM_GENRES_NUM = 100
 
 def define_flags():
     """Define flags."""
