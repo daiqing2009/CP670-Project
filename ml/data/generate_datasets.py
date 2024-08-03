@@ -424,8 +424,10 @@ def generate_datasets(extracted_data_dir,
         "vocab_file": vocab_file,
         # "vocab_max_id": max([arr[VOCAB_MOVIE_ID_INDEX] for arr in movie_vocab])
     })
-
-    write_vocab_json(movie_genre_counter, filename=os.path.join(output_dir, OUTPUT_GENRE_VOCAB_FILENAME.format(content_name=FLAGS.content_name)))
+    
+    # sort coutner before export
+    vocab_json_filename = os.path.join(output_dir, OUTPUT_GENRE_VOCAB_FILENAME.format(content_name=FLAGS.content_name))
+    write_vocab_json(sorted(movie_genre_counter.items(), key=lambda pair: pair[1], reverse=True), filename=vocab_json_filename)
 
     for vocab, filename, key in zip([movie_year_vocab, movie_genre_vocab],
                                     [vocab_year_filename, vocab_genre_filename],
