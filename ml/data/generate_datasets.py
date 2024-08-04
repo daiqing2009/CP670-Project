@@ -253,7 +253,7 @@ def generate_movie_feature_vocabs(movies_df, movie_counts, movie_sum_of_rating):
     global_avg_rating = movie_sum_of_rating.total() / movie_counts.total()
 
     for movie_id, title, genres in movies_df.values:
-        count = movie_counts.get(movie_id)
+        count = movie_counts.get(movie_id) or 0
         avg_rating = global_avg_rating if (count and count > 0) else 0
         avg_rating = movie_sum_of_rating.get(movie_id) / count if count and count > 0 else global_avg_rating
         genre_list = genres.split("|")
